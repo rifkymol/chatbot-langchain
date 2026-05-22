@@ -1,0 +1,45 @@
+from fastapi import APIRouter, Depends, HTTPException
+from openai import OpenAIError, RateLimitError
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.schemas import ChatRequest, ChatResponse
+from app.services.chat_service import save_message
+from app.services.graph_service import run_chatbot_graph
+
+router = APIRouter(
+    prefix="/chat",
+    tags=["Chat"]
+)
+
+
+@router.post("", response_model=ChatResponse)
+def chat(payload: ChatRequest, db: Session = Depends(get_db)):
+    save_message(
+        db=db,
+        session_id=payload.session_id,
+        role="user",
+        content=payload.message
+    )
+
+    try:
+        answer = run_chatbot_graph(payload.message)
+    except RateLimitError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI quota or rate limit error. Check your API billing/quota.",
+        ) from exc
+    except OpenAIError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="OpenAI service error while generating the chat response.",
+        ) from exc
+
+    save_message(
+        db=db,
+        session_id=payload.session_id,
+        role="assistant",
+        content=answer
+    )
+
+    return ChatResponse(answer=answer)
