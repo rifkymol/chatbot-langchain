@@ -94,7 +94,7 @@ async def add_pdf_to_vector_store(file: UploadFile):
     finally:
         os.remove(temp_file_path)
 
-def search_relevant_docs(query: str, k: int=4):
+def search_relevant_docs(query: str, k: int=8):
     vector_store = get_vector_store()
     docs = vector_store.similarity_search(query, k=k)
     return docs
