@@ -35,22 +35,26 @@ def get_chat_history(db: Session, session_id: str, limit: int = 10):
         .all()
     )
 
-def generate_answer(question: str,context: str):
+def generate_answer(question: str,context: str, chat_history: str = ""):
     messages = [
         SystemMessage(
             content=(
                 "Kamu adalah AI assistant untuk menjawab pertanyaan berdasarkan context dokumen. "
-                "Jawab hanya berdasarkan context yang diberikan. "
-                "Jika jawaban tidak ada di context, katakan: 'Saya tidak menemukan informasi tersebut di dokumen.' "
-                "Jangan mengarang jawaban di luar context."
+                "Gunakan chat history hanya untuk memahami maksud pertanyaan lanjutan. "
+                "Jawab hanya berdasarkan context dokumen yang diberikan. "
+                "Jika jawaban tidak ada di context dokumen, katakan: 'Saya tidak menemukan informasi tersebut di dokumen.' "
+                "Jangan mengarang jawaban di luar context dokumen."
             )
         ),
         HumanMessage(
             content=f"""
-Context:
+Chat History:
+{chat_history}
+
+Context Dokumen:
 {context}
 
-Question:
+Pertanyaan User:
 {question}
 """
         )

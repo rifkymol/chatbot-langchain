@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas import ChatRequest, ChatResponse
-from app.services.chat_service import save_message
+from app.services.chat_service import save_message, get_chat_history
 from app.services.graph_service import run_chatbot_graph
 
 router = APIRouter(
@@ -22,8 +22,22 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
         content=payload.message
     )
 
+    history_message = get_chat_history(
+        db=db,
+        session_id=payload.session_id,
+        limit=6
+    )
+
+    history_text = "\n".join([
+        f"{message.role}: {message.content}"
+        for message in reversed(history_message)
+    ])
+
     try:
-        result = run_chatbot_graph(payload.message)
+        result = run_chatbot_graph(
+            question=payload.message,
+            chat_history=history_text    
+        )
         answer = result["answer"]
 
     except RateLimitError as exc:

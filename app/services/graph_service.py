@@ -7,6 +7,7 @@ from app.services.chat_service import generate_answer
 class ChatState(TypedDict):
     question: str
     context: str
+    chat_history: str
     answer: str
     sources: List[Dict[str, Any]]
 
@@ -75,6 +76,7 @@ def retrieve_context_node(state: ChatState):
     return {
         "question": question,
         "context": context,
+        "chat_history": state["chat_history"],
         "answer": "",
         "sources": sources,
     }
@@ -82,12 +84,14 @@ def retrieve_context_node(state: ChatState):
 def generate_answer_node(state: ChatState):
     answer = generate_answer(
         question=state["question"],
-        context=state["context"]
+        context=state["context"],
+        chat_history=state["chat_history"],
     )
 
     return {
         "question": state["question"],
         "context": state["context"],
+        "chat_history": state["chat_history"],
         "answer": answer,
         "sources": state["sources"]
     }
@@ -106,12 +110,13 @@ def build_chat_graph():
 
 chat_graph = build_chat_graph()
 
-def run_chatbot_graph(question: str):
+def run_chatbot_graph(question: str, chat_history: str =""):
     result = chat_graph.invoke({
         "question": question,
         "context": "",
+        "chat_history": chat_history,
         "answer": "",
-        "source": [],
+        "sources": [],
     })
 
     return {
