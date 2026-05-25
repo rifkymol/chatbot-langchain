@@ -14,10 +14,16 @@ router = APIRouter(
 
 @router.post("")
 def add_knowledge(payload: KnowledgeRequest):
-    return add_text_to_vector_store(
-        title=payload.title,
-        content=payload.content
-    )
+    try:
+        return add_text_to_vector_store(
+            title=payload.title,
+            content=payload.content
+        )
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to add knowledge: {str(error)}"
+        )
 
 @router.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
