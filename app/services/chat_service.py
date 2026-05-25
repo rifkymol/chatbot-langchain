@@ -39,8 +39,10 @@ def generate_answer(question: str,context: str):
     messages = [
         SystemMessage(
             content=(
-                "Kamu adalah AI assistant yang menjawab berdasarkan context."
-                "Jika jawaban tidak ada di context, bilang bahwa kamu tidak tahu."
+                "Kamu adalah AI assistant untuk menjawab pertanyaan berdasarkan context dokumen. "
+                "Jawab hanya berdasarkan context yang diberikan. "
+                "Jika jawaban tidak ada di context, katakan: 'Saya tidak menemukan informasi tersebut di dokumen.' "
+                "Jangan mengarang jawaban di luar context."
             )
         ),
         HumanMessage(

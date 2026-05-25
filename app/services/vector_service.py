@@ -88,7 +88,7 @@ async def add_pdf_to_vector_store(file: UploadFile):
             "type": "pdf",
             "filename": file.filename,
             "pages": len(documents),
-            "chhunks": len(chunks)
+            "chunks": len(chunks)
         }
     
     finally:

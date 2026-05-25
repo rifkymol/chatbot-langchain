@@ -23,16 +23,31 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
     )
 
     try:
-        answer = run_chatbot_graph(payload.message)
+        result = run_chatbot_graph(payload.message)
+        answer = result["answer"]
+
     except RateLimitError as exc:
         raise HTTPException(
             status_code=503,
             detail="OpenAI quota or rate limit error. Check your API billing/quota.",
         ) from exc
+    
     except OpenAIError as exc:
         raise HTTPException(
             status_code=502,
             detail="OpenAI service error while generating the chat response.",
+        ) from exc
+    
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid chatbot response: {str(exc)}",
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error while generating chat response: {type(exc).__name__}: {str(exc)}",
         ) from exc
 
     save_message(
@@ -42,4 +57,7 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
         content=answer
     )
 
-    return ChatResponse(answer=answer)
+    return ChatResponse(
+        answer=answer,
+        sources=result["sources"]
+    )
