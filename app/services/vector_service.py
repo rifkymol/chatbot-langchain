@@ -9,10 +9,18 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from app.config import DATABASE_URL, COLLECTION_NAME
-
-embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
+from app.config import (
+    DATABASE_URL,
+    COLLECTION_NAME,
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
+    OPENAI_EMBEDDING_MODEL,
+)
+embeddings = OpenAIEmbeddings(
+    model=OPENAI_EMBEDDING_MODEL,
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL,
+)
 
 def get_vector_store():
     return PGVector(

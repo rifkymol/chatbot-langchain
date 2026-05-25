@@ -3,10 +3,16 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.models import ChatMessage
+from app.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_CHAT_MODEL
 
 
 # llm = ChatOpenAI(model="gpt-5-nano", temperature=0.2)
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+llm = ChatOpenAI(
+    model=OPENAI_CHAT_MODEL,
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL,
+    temperature=0.2,
+)
 
 
 def save_message(db: Session, session_id: str, role: str, content: str):
