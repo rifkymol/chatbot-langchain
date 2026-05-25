@@ -30,7 +30,7 @@ async def upload_pdf(file: UploadFile = File(...)):
             detail=str(error)
         )
     
-    except Expection as error:
+    except Exception as error:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload PDF: {str(error)}"
