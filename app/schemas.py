@@ -11,6 +11,7 @@ class SourceItem(BaseModel):
     source_type: Optional[str] = None
     page: Optional[int] = None
     chunk_index: Optional[int] = None
+    relevance_score: Optional[float] = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -19,4 +20,3 @@ class ChatResponse(BaseModel):
 class KnowledgeRequest(BaseModel):
     title: str
     content: str
-    

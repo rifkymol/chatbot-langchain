@@ -23,6 +23,7 @@ def extract_sources(docs):
             "source_type": metadata.get("source_type"),
             "page": metadata.get("page"),
             "chunk_index": metadata.get("chunk_index"),
+            "relevance_score": metadata.get("relevance_score"),
         })
 
     unique_sources = []
@@ -60,9 +61,19 @@ def retrieve_context_node(state: ChatState):
     )
 
     docs = search_relevant_docs(
-        question,
-        k=10 if is_summary_question else 4
+        query=question,
+        k=10 if is_summary_question else 4,
+        min_score=0.25
     )
+
+    if not docs:
+        return {
+            "question": question,
+            "context": "",
+            "chat_history": state["chat_history"],
+            "answer": "Saya tidak menemukan informasi yang relevan di dokumen.",
+            "sources": [],
+        }
 
     context = "\n\n".join([
         f"Source: {doc.metadata.get('source') or doc.metadata.get('title')}\n"
@@ -81,6 +92,12 @@ def retrieve_context_node(state: ChatState):
         "sources": sources,
     }
 
+def should_generate_answer(state: ChatState):
+    if not state["context"]:
+        return "end"
+    
+    return "generate"
+
 def generate_answer_node(state: ChatState):
     answer = generate_answer(
         question=state["question"],
@@ -98,12 +115,20 @@ def generate_answer_node(state: ChatState):
 
 def build_chat_graph():
     graph = StateGraph(ChatState)
-
     graph.add_node("retrieve_context", retrieve_context_node)
     graph.add_node("generate_answer", generate_answer_node)
-
+    
     graph.add_edge(START, "retrieve_context")
-    graph.add_edge("retrieve_context", "generate_answer")
+
+    graph.add_conditional_edges(
+        "retrieve_context",
+        should_generate_answer,
+        {
+            "generate": "generate_answer",
+            "end" : END,
+        }
+    )
+
     graph.add_edge("generate_answer", END)
 
     return graph.compile()

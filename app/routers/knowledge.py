@@ -67,5 +67,5 @@ def debug_search(
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to debug search {str(error)}"
+            detail=f"Failed to debug search: {str(error)}"
         )

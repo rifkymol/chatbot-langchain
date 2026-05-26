@@ -94,7 +94,20 @@ async def add_pdf_to_vector_store(file: UploadFile):
     finally:
         os.remove(temp_file_path)
 
-def search_relevant_docs(query: str, k: int=8):
+def search_relevant_docs(query: str, k: int=8, min_score: float = -.25):
     vector_store = get_vector_store()
-    docs = vector_store.similarity_search(query, k=k)
-    return docs
+    
+    results = vector_store.similarity_search_with_relevance_scores(
+        query,
+        k=k
+    )
+
+    filtered_docs = []
+
+    for doc, score in results:
+        doc.metadata["relevance_score"] = score
+
+        if score >= min_score:
+            filtered_docs.append(doc)
+
+    return filtered_docs
