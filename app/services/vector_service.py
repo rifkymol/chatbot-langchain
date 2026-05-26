@@ -97,12 +97,23 @@ async def add_pdf_to_vector_store(file: UploadFile):
     finally:
         os.remove(temp_file_path)
 
-def search_relevant_docs(query: str, k: int=8, min_score: float = 0.25):
+def search_relevant_docs(
+    query: str,
+    k: int=8,
+    min_score: float = 0.25,
+    source: str | None = None    
+):
+
     vector_store = get_vector_store()
 
+    search_kwargs = build_search_kwargs(
+        query=query,
+        k=k,
+        source=source,
+    )
+
     results = vector_store.similarity_search_with_relevance_scores(
-        query,
-        k=k
+        **search_kwargs
     )
 
     filtered_docs = []
@@ -114,6 +125,28 @@ def search_relevant_docs(query: str, k: int=8, min_score: float = 0.25):
             filtered_docs.append(doc)
 
     return filtered_docs
+
+def build_search_kwargs(
+    query: str,
+    k: int=8,
+    source: str | None = None
+):
+    search_kwargs = {
+        "query": query,
+        "k": k,
+    }
+
+    source = source.strip() if source else None
+
+    if source:
+        search_kwargs["filter"] = {
+            "$or": [
+                {"source": {"$eq": source}},
+                {"title": {"$eq": source}},
+            ]
+        }
+
+    return search_kwargs
 
 def list_knowledge_sources():
     with engine.connect() as connection:

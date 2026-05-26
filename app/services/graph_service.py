@@ -8,6 +8,7 @@ class ChatState(TypedDict):
     question: str
     context: str
     chat_history: str
+    source: str | None
     answer: str
     sources: List[Dict[str, Any]]
 
@@ -63,7 +64,8 @@ def retrieve_context_node(state: ChatState):
     docs = search_relevant_docs(
         query=question,
         k=10 if is_summary_question else 4,
-        min_score=0.25
+        min_score=0.25,
+        source=state.get("source")
     )
 
     if not docs:
@@ -71,6 +73,7 @@ def retrieve_context_node(state: ChatState):
             "question": question,
             "context": "",
             "chat_history": state["chat_history"],
+            "source": state.get("source"),
             "answer": "Saya tidak menemukan informasi yang relevan di dokumen.",
             "sources": [],
         }
@@ -109,6 +112,7 @@ def generate_answer_node(state: ChatState):
         "question": state["question"],
         "context": state["context"],
         "chat_history": state["chat_history"],
+        "source": state.get("source"),
         "answer": answer,
         "sources": state["sources"]
     }
@@ -135,11 +139,16 @@ def build_chat_graph():
 
 chat_graph = build_chat_graph()
 
-def run_chatbot_graph(question: str, chat_history: str =""):
+def run_chatbot_graph(
+    question: str,
+    chat_history: str ="",
+    source: str | None = None
+):
     result = chat_graph.invoke({
         "question": question,
         "context": "",
         "chat_history": chat_history,
+        "source": source,
         "answer": "",
         "sources": [],
     })

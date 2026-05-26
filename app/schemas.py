@@ -4,6 +4,7 @@ from typing import List, Optional
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    source: Optional[str] = None
 
 class SourceItem(BaseModel):
     title: Optional[str] = None
