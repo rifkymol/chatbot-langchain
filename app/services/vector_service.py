@@ -8,6 +8,9 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sqlalchemy import text
+
+from app.database import engine
 
 from app.config import (
     DATABASE_URL,
@@ -94,9 +97,9 @@ async def add_pdf_to_vector_store(file: UploadFile):
     finally:
         os.remove(temp_file_path)
 
-def search_relevant_docs(query: str, k: int=8, min_score: float = -.25):
+def search_relevant_docs(query: str, k: int=8, min_score: float = 0.25):
     vector_store = get_vector_store()
-    
+
     results = vector_store.similarity_search_with_relevance_scores(
         query,
         k=k
@@ -111,3 +114,36 @@ def search_relevant_docs(query: str, k: int=8, min_score: float = -.25):
             filtered_docs.append(doc)
 
     return filtered_docs
+
+def list_knowledge_sources():
+    with engine.connect() as connection:
+        result = connection.execute(text("""
+            SELECT
+                cmetadata->>'title' AS title,
+                cmetadata->>'source' AS source,
+                cmetadata->>'source_type' AS source_type,
+                COUNT(*) AS chunks
+            FROM langchain_pg_embedding
+            GROUP BY
+                cmetadata->>'title',
+                cmetadata->>'source',
+                cmetadata->>'source_type'
+            ORDER BY title;
+        """))
+
+        sources = []
+
+        for row in result:
+            item = row._mapping
+
+            sources.append({
+                "title": item["title"],
+                "source": item["source"],
+                "source_type": item["source_type"],
+                "chunks": item["chunks"],
+            })
+
+    return {
+        "count": len(sources),
+        "sources": sources
+    }

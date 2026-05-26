@@ -5,6 +5,7 @@ from app.services.vector_service import (
     add_text_to_vector_store,
     add_pdf_to_vector_store,
     search_relevant_docs,
+    list_knowledge_sources,
 )
 
 router = APIRouter(
@@ -68,4 +69,15 @@ def debug_search(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to debug search: {str(error)}"
+        )
+    
+@router.get("/sources")
+def get_knowledge_sources():
+    try:
+        return list_knowledge_sources()
+    
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list knowledge sources: {str(error)}"
         )
