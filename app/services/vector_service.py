@@ -147,3 +147,27 @@ def list_knowledge_sources():
         "count": len(sources),
         "sources": sources
     }
+
+def delete_knowledge_by_source(source: str):
+    if not source or not source.strip():
+        raise ValueError("Source is required")
+    
+    source = source.strip()
+
+    with engine.begin() as connection:
+        result = connection.execute(
+            text("""
+                DELETE FROM langchain_pg_embedding
+                WHERE cmetadata->>'source' = :source
+                OR    cmetadata->>'title' = :source
+            """),
+            {"source": source}
+        )
+
+        deleted_chunks = result.rowcount
+
+    return {
+        "message": "Knowledge source is deleted successfully",
+        "source": source,
+        "deleted_chunks": deleted_chunks
+    }

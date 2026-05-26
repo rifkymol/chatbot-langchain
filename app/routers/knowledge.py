@@ -6,6 +6,7 @@ from app.services.vector_service import (
     add_pdf_to_vector_store,
     search_relevant_docs,
     list_knowledge_sources,
+    delete_knowledge_by_source,
 )
 
 router = APIRouter(
@@ -80,4 +81,23 @@ def get_knowledge_sources():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to list knowledge sources: {str(error)}"
+        )
+    
+@router.delete("/source")
+def delete_knowledge_source(
+    source: str = Query(..., description="Exact source/title to delete")
+):
+    try:
+        return delete_knowledge_by_source(source)
+    
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
+    
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete knowledge source: {str(error)}"
         )
