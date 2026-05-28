@@ -204,3 +204,40 @@ def delete_knowledge_by_source(source: str):
         "source": source,
         "deleted_chunks": deleted_chunks
     }
+
+def get_documents_by_source(source: str, limit: int = 20):
+    if not source or not source.strip():
+        raise ValueError("Source is required")
+    
+    source = source.strip()
+
+    with engine.connect() as connection:
+        result = connection.execute(
+            text("""
+                SELECT
+                    document,
+                    cmetadata
+                FROM langchain_pg_embedding
+                WHERE cmetadata->>'source' = :source
+                OR cmetadata->>'title' = :source
+                ORDER BY
+                    CAST(COALESCE(cmetadata->>'chunk_index', '0') AS INTEGER)
+                LIMIT :limit 
+        """),
+        {
+            "source": source,
+            "limit": limit
+        }
+    )
+        
+    docs = []
+
+    for row in result:
+        item = row._mapping
+
+        docs.append({
+            "content": item["document"],
+            "metadata": item["cmetadata"],
+        })
+
+    return docs

@@ -1,12 +1,14 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile, Query
 
 from app.schemas import KnowledgeRequest
+from app.services.chat_service import generate_document_summary
 from app.services.vector_service import (
     add_text_to_vector_store,
     add_pdf_to_vector_store,
     search_relevant_docs,
     list_knowledge_sources,
     delete_knowledge_by_source,
+    get_documents_by_source
 )
 
 router = APIRouter(
@@ -100,4 +102,49 @@ def delete_knowledge_source(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete knowledge source: {str(error)}"
+        )
+    
+@router.get("/summary")
+def summarize_knowledge_source(
+    source: str = Query(..., description="Exact source/title to summarize"),
+    limit: int = Query(20, description="Maximum chunks to summarize")
+):
+    try:
+        docs = get_documents_by_source(source=source, limit=limit)
+
+        if not docs:
+            raise HTTPException(
+                status_code=404,
+                detail="Knowledge source not found"
+            )
+        
+        context = "\n\n".join([
+            f"Chunk {index + 1}:\n{doc['content']}"
+            for index, doc in enumerate(docs)
+        ])
+
+        summary = generate_document_summary(
+            source=source,
+            context=context
+        )
+
+        return {
+            "source": source,
+            "summary": summary,
+            "chunks_used": len(docs)
+        }
+    
+    except HTTPException:
+        raise
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
+    
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to summarize knowledge source: {str(error)}"
         )

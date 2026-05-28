@@ -62,3 +62,28 @@ Pertanyaan User:
 
     response = llm.invoke(messages)
     return response.content
+
+def generate_document_summary(source: str, context: str):
+    message = [
+        SystemMessage(
+            content=(
+                "kamu adalah AI assistant yang akan merangkum dokumen."
+                "Buat ringkasan yang jelas, padat, dan hanya berdasarkan context dokumen"
+                "Jangan menambahkan informasi di luar dokumen"
+            )
+        ),
+        HumanMessage(
+            content=f"""
+Source:
+{source}
+
+Context Dokumen:
+{context}
+
+Tolong buat ringkasan isi utama dokumen ini!
+"""
+        )
+    ]
+
+    response = llm.invoke(message)
+    return response.content
