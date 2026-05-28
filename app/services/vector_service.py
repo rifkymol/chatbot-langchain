@@ -219,25 +219,25 @@ def get_documents_by_source(source: str, limit: int = 20):
                     cmetadata
                 FROM langchain_pg_embedding
                 WHERE cmetadata->>'source' = :source
-                OR cmetadata->>'title' = :source
+                   OR cmetadata->>'title' = :source
                 ORDER BY
                     CAST(COALESCE(cmetadata->>'chunk_index', '0') AS INTEGER)
-                LIMIT :limit 
-        """),
-        {
-            "source": source,
-            "limit": limit
-        }
-    )
-        
-    docs = []
+                LIMIT :limit
+            """),
+            {
+                "source": source,
+                "limit": limit
+            }
+        )
 
-    for row in result:
-        item = row._mapping
+        docs = []
 
-        docs.append({
-            "content": item["document"],
-            "metadata": item["cmetadata"],
-        })
+        for row in result:
+            item = row._mapping
+
+            docs.append({
+                "content": item["document"],
+                "metadata": item["cmetadata"],
+            })
 
     return docs

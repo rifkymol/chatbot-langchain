@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+import json
 
 from app.models import ChatMessage
 from app.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_CHAT_MODEL
@@ -87,3 +88,53 @@ Tolong buat ringkasan isi utama dokumen ini!
 
     response = llm.invoke(message)
     return response.content
+
+def generate_structured_document_summary(source: str, context: str):
+    messages = [
+        SystemMessage(
+            content=(
+                "Kamu adalah AI assistant yang menganalisis dokumen. "
+                "Jawab hanya berdasarkan context dokumen. "
+                "Jangan menambahkan informasi dari luar dokumen. "
+                "Balas hanya dalam format JSON valid tanpa markdown."
+            )
+        ),
+        HumanMessage(
+            content=f"""
+Source:
+{source}
+
+Context Dokumen:
+{context}
+
+Buat structured summary dalam format JSON valid dengan struktur berikut:
+{{
+  "overview": "Ringkasan singkat isi dokumen",
+  "main_points": ["poin utama 1", "poin utama 2"],
+  "features": ["fitur 1", "fitur 2"],
+  "business_logic": ["logic 1", "logic 2"],
+  "tech_stack": ["tech 1", "tech 2"],
+  "risks_or_notes": ["catatan 1", "catatan 2"]
+}}
+
+Jika bagian tertentu tidak ditemukan di dokumen, gunakan array kosong [].
+"""
+        )
+    ]
+
+    response = llm.invoke(messages)
+    content = response.content.strip()
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {
+            "overview": content,
+            "main_points": [],
+            "features": [],
+            "business_logic": [],
+            "tech_stack": [],
+            "risks_or_notes": [
+                "Model returned non-JSON response, fallback used."
+            ]
+        }
