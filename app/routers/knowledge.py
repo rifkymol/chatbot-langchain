@@ -89,25 +89,6 @@ def get_knowledge_sources():
             detail=f"Failed to list knowledge sources: {str(error)}"
         )
     
-@router.delete("/source")
-def delete_knowledge_source(
-    source: str = Query(..., description="Exact source/title to delete")
-):
-    try:
-        return delete_knowledge_by_source(source)
-    
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400,
-            detail=str(error)
-        )
-    
-    except Exception as error:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete knowledge source: {str(error)}"
-        )
-    
 @router.get("/summary")
 def summarize_knowledge_source(
     source: str = Query(..., description="Exact source/title to summarize"),
@@ -197,3 +178,23 @@ def structured_summary_knowledge_source(
             status_code=500,
             detail=f"Failed to create structured summary: {str(error)}"
         )
+    
+@router.delete("/source")
+def delete_knowledge_source(
+    source: str = Query(..., description="Exact source/title to delete")
+):
+    try:
+        return delete_knowledge_by_source(source)
+    
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
+    
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete knowledge source: {str(error)}"
+        )
+    

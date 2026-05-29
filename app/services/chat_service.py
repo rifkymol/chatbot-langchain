@@ -36,16 +36,55 @@ def get_chat_history(db: Session, session_id: str, limit: int = 10):
         .all()
     )
 
-def generate_answer(question: str,context: str, chat_history: str = ""):
+def build_system_prompt(intent: str):
+    base_rule = (
+        "Kamu adalah AI assistant untuk membantu user memahami dan mendiskusikan dokumen. "
+        "Jawab hanya berdasarkan context dokumen yang diberikan. "
+        "Gunakan chat history hanya untuk memahami maksud pertanyaan lanjutan. "
+        "Jika informasi tidak ada di context dokumen, katakan bahwa informasi tersebut tidak ditemukan di dokumen. "
+        "Jangan mengarang requirement atau fakta baru di luar dokumen. "
+    )
+
+    if intent == "action_plan":
+        return (
+            base_rule +
+            "Fokus jawabanmu pada apa yang diminta dokumen, langkah yang perlu dilakukan, "
+            "dan urutan tindakan praktis."
+        )
+
+    if intent == "checklist":
+        return (
+            base_rule +
+            "Fokus jawabanmu pada checklist persiapan yang perlu dilakukan user berdasarkan dokumen."
+        )
+
+    if intent == "priority":
+        return (
+            base_rule +
+            "Fokus jawabanmu pada prioritas: apa yang sebaiknya dilakukan dulu, berikutnya, dan terakhir."
+        )
+
+    if intent == "summary":
+        return (
+            base_rule +
+            "Fokus jawabanmu pada ringkasan isi utama dokumen secara jelas dan padat."
+        )
+
+    return (
+        base_rule +
+        "Jawab pertanyaan user secara langsung berdasarkan dokumen."
+    )
+
+
+def generate_answer(
+    question: str,
+    context: str,
+    chat_history: str = "",
+    intent: str = "qa"
+):
     messages = [
         SystemMessage(
-            content=(
-                "Kamu adalah AI assistant untuk menjawab pertanyaan berdasarkan context dokumen. "
-                "Gunakan chat history hanya untuk memahami maksud pertanyaan lanjutan. "
-                "Jawab hanya berdasarkan context dokumen yang diberikan. "
-                "Jika jawaban tidak ada di context dokumen, katakan: 'Saya tidak menemukan informasi tersebut di dokumen.' "
-                "Jangan mengarang jawaban di luar context dokumen."
-            )
+            content=build_system_prompt(intent)
         ),
         HumanMessage(
             content=f"""
@@ -54,6 +93,9 @@ Chat History:
 
 Context Dokumen:
 {context}
+
+Intent:
+{intent}
 
 Pertanyaan User:
 {question}

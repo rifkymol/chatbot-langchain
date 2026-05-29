@@ -9,6 +9,8 @@ class ChatState(TypedDict):
     context: str
     chat_history: str
     source: str | None
+    mode: str | None
+    intent: str
     answer: str
     sources: List[Dict[str, Any]]
 
@@ -43,6 +45,87 @@ def extract_sources(docs):
 
     return unique_sources
 
+def detect_intent(question: str, mode: str | None = "auto"):
+    allowed_modes = {
+        "qa",
+        "summary",
+        "action_plan",
+        "checklist",
+        "priority",
+    }
+
+    if mode and mode != "auto" and mode in allowed_modes:
+        return mode
+
+    lowered_question = question.lower()
+
+    action_keywords = [
+        "minta aku ngapain",
+        "harus ngapain",
+        "apa yang harus dilakukan",
+        "langkah apa",
+        "next step",
+        "action",
+        "task",
+        "todo",
+    ]
+
+    checklist_keywords = [
+        "apa saja yang perlu dipersiapkan",
+        "perlu disiapkan",
+        "checklist",
+        "persiapan",
+        "siapkan",
+    ]
+
+    priority_keywords = [
+        "mana dulu",
+        "yang dilakukan dulu",
+        "prioritas",
+        "urutan",
+        "sebaiknya dilakukan dulu",
+        "mulai dari mana",
+    ]
+
+    summary_keywords = [
+        "ringkas",
+        "ringkasan",
+        "summary",
+        "isi utama",
+        "dokumen ini tentang apa",
+    ]
+
+    if any(keyword in lowered_question for keyword in action_keywords):
+        return "action_plan"
+
+    if any(keyword in lowered_question for keyword in checklist_keywords):
+        return "checklist"
+
+    if any(keyword in lowered_question for keyword in priority_keywords):
+        return "priority"
+
+    if any(keyword in lowered_question for keyword in summary_keywords):
+        return "summary"
+
+    return "qa"
+
+def detect_intent_node(state: ChatState):
+    intent = detect_intent(
+        question=state["question"],
+        mode=state.get("mode", "auto")
+    )
+
+    return {
+        "question": state["question"],
+        "context": state["context"],
+        "chat_history": state["chat_history"],
+        "source": state.get("source"),
+        "mode": state.get("mode", "auto"),
+        "intent": intent,
+        "answer": state["answer"],
+        "sources": state["sources"],
+    }
+
 def retrieve_context_node(state: ChatState):
     question = state["question"]
 
@@ -74,6 +157,8 @@ def retrieve_context_node(state: ChatState):
             "context": "",
             "chat_history": state["chat_history"],
             "source": state.get("source"),
+            "mode": state.get("mode"),
+            "intent": state["intent"],
             "answer": "Saya tidak menemukan informasi yang relevan di dokumen.",
             "sources": [],
         }
@@ -91,6 +176,9 @@ def retrieve_context_node(state: ChatState):
         "question": question,
         "context": context,
         "chat_history": state["chat_history"],
+        "source": state.get("source"),
+        "mode": state.get("mode"),
+        "intent": state["intent"],
         "answer": "",
         "sources": sources,
     }
@@ -106,6 +194,7 @@ def generate_answer_node(state: ChatState):
         question=state["question"],
         context=state["context"],
         chat_history=state["chat_history"],
+        intent=state["intent"],
     )
 
     return {
@@ -113,16 +202,20 @@ def generate_answer_node(state: ChatState):
         "context": state["context"],
         "chat_history": state["chat_history"],
         "source": state.get("source"),
+        "mode": state.get("mode"),
+        "intent": state["intent"],
         "answer": answer,
         "sources": state["sources"]
     }
 
 def build_chat_graph():
     graph = StateGraph(ChatState)
+    graph.add_node("detect_intent", detect_intent_node)
     graph.add_node("retrieve_context", retrieve_context_node)
     graph.add_node("generate_answer", generate_answer_node)
-    
-    graph.add_edge(START, "retrieve_context")
+
+    graph.add_edge(START, "detect_intent")
+    graph.add_edge("detect_intent", "retrieve_context")
 
     graph.add_conditional_edges(
         "retrieve_context",
@@ -141,14 +234,17 @@ chat_graph = build_chat_graph()
 
 def run_chatbot_graph(
     question: str,
-    chat_history: str ="",
-    source: str | None = None
+    chat_history: str = "",
+    source: str | None = None,
+    mode: str | None = "auto"
 ):
     result = chat_graph.invoke({
         "question": question,
         "context": "",
         "chat_history": chat_history,
         "source": source,
+        "mode": mode,
+        "intent": "qa",
         "answer": "",
         "sources": [],
     })

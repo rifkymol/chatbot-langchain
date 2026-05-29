@@ -37,7 +37,8 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
         result = run_chatbot_graph(
             question=payload.message,
             chat_history=history_text,
-            source=payload.source
+            source=payload.source,
+            mode=payload.mode
         )
         answer = result["answer"]
 
