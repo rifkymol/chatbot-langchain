@@ -4,7 +4,7 @@ from typing import List, Optional
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    source: Optional[str] = None
+    source: Optional[str | List[str]] = None
     mode: Optional[str] = "auto"
 
 class SourceItem(BaseModel):
@@ -12,11 +12,13 @@ class SourceItem(BaseModel):
     source: Optional[str] = None
     source_type: Optional[str] = None
     page: Optional[int] = None
+    image_index: Optional[int] = None
     chunk_index: Optional[int] = None
     relevance_score: Optional[float] = None
 
 class ChatResponse(BaseModel):
     answer: str
+    intent: Optional[str] = None
     sources: List[SourceItem] = []
 
 class KnowledgeRequest(BaseModel):

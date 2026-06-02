@@ -21,7 +21,7 @@ Create a `.env` file in the project root:
 
 ```env
 OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=postgresql+psycopg://chatbot_user:chatbot_password@localhost:5432/chatbot_db
+DATABASE_URL=your_postgres_connection_url
 COLLECTION_NAME=knowledge_base
 ```
 

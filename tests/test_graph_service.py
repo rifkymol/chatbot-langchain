@@ -36,6 +36,7 @@ class RetrieveContextNodeTest(unittest.TestCase):
             result,
             {
                 "answer": "Saya tidak menemukan informasi yang relevan di dokumen.",
+                "intent": "qa",
                 "sources": [],
             },
         )
