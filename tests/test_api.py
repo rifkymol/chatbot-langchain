@@ -43,12 +43,14 @@ class ApiTest(unittest.TestCase):
         ]
         graph_result = {
             "answer": "Isi dokumen adalah contoh.",
+            "intent": None,
             "sources": [
                 {
                     "title": "manual.pdf",
                     "source": "manual.pdf",
                     "source_type": "pdf",
                     "page": 1,
+                    "image_index": None,
                     "chunk_index": 0,
                     "relevance_score": 0.91,
                 }

@@ -1,8 +1,11 @@
 from typing import TypedDict, List, Dict, Any
 from langgraph.graph import StateGraph, START, END
 
-from app.services.vector_service import search_relevant_docs
 from app.services.chat_service import generate_answer
+from app.services.vector_service import (
+    search_relevant_docs,
+    get_visual_documents_by_source,
+)
 
 class ChatState(TypedDict):
     question: str
@@ -25,6 +28,7 @@ def extract_sources(docs):
             "source": metadata.get("source"),
             "source_type": metadata.get("source_type"),
             "page": metadata.get("page"),
+            "image_index": metadata.get("image_index"),
             "chunk_index": metadata.get("chunk_index"),
             "relevance_score": metadata.get("relevance_score"),
         })
@@ -126,10 +130,89 @@ def detect_intent_node(state: ChatState):
         "sources": state["sources"],
     }
 
+def is_visual_question(question: str):
+    visual_keywords = [
+        "gambar",
+        "diagram",
+        "flowchart",
+        "screenshot",
+        "tampilan",
+        "ui",
+        "mockup",
+        "chart",
+        "grafik",
+        "visual",
+        "arsitektur",
+        "architecture",
+        "wireframe",
+        "layout",
+    ]
+
+    lowered_question = question.lower()
+
+    return any(keyword in lowered_question for keyword in visual_keywords)
+
+def is_visual_question(question: str):
+    visual_keywords = [
+        "gambar",
+        "diagram",
+        "flowchart",
+        "screenshot",
+        "tampilan",
+        "ui",
+        "mockup",
+        "chart",
+        "grafik",
+        "visual",
+        "arsitektur",
+        "architecture",
+        "wireframe",
+        "layout",
+        "screen",
+        "desain",
+        "design",
+        "form",
+        "table",
+        "tabel",
+    ]
+
+    lowered_question = question.lower()
+
+    return any(keyword in lowered_question for keyword in visual_keywords)
+
 def retrieve_context_node(state: ChatState):
     question = state["question"]
     intent = state.get("intent", "qa")
     mode = state.get("mode", "auto")
+
+    if is_visual_question(question) and state.get("source"):
+        visual_docs = get_visual_documents_by_source(
+            source=state.get("source"),
+            limit=10,
+        )
+
+        if visual_docs:
+            context = "\n\n".join([
+                f"Source: {doc.metadata.get('source') or doc.metadata.get('title')}\n"
+                f"Source Type: {doc.metadata.get('source_type')}\n"
+                f"Page: {doc.metadata.get('page')}\n"
+                f"Image Index: {doc.metadata.get('image_index')}\n"
+                f"Content:\n{doc.page_content}"
+                for doc in visual_docs
+            ])
+
+            sources = extract_sources(visual_docs)
+
+            return {
+                "question": question,
+                "context": context,
+                "chat_history": state["chat_history"],
+                "source": state.get("source"),
+                "mode": state.get("mode"),
+                "intent": state["intent"],
+                "answer": "",
+                "sources": sources,
+            }
 
     summary_keywords = [
         "isi utama",
@@ -165,13 +248,7 @@ def retrieve_context_node(state: ChatState):
             "sources": [],
         }
 
-    context = "\n\n".join([
-        f"Source: {doc.metadata.get('source') or doc.metadata.get('title')}\n"
-        f"Page: {doc.metadata.get('page')}\n"
-        f"Content:\n{doc.page_content}"
-        for doc in docs
-    ])
-
+    context = build_context_from_docs(docs)
     sources = extract_sources(docs)
 
     return {
@@ -179,8 +256,8 @@ def retrieve_context_node(state: ChatState):
         "context": context,
         "chat_history": state["chat_history"],
         "source": state.get("source"),
-        "mode": mode,
-        "intent": intent,
+        "mode": state.get("mode"),
+        "intent": state["intent"],
         "answer": "",
         "sources": sources,
     }
@@ -256,3 +333,15 @@ def run_chatbot_graph(
         "intent": result["intent"],
         "sources": result["sources"],
     }
+
+
+def build_context_from_docs(docs):
+    return "\n\n".join([
+        f"Source: {doc.metadata.get('source') or doc.metadata.get('title')}\n"
+        f"Source Type: {doc.metadata.get('source_type')}\n"
+        f"Page: {doc.metadata.get('page')}\n"
+        f"Image Index: {doc.metadata.get('image_index')}\n"
+        f"Chunk Index: {doc.metadata.get('chunk_index')}\n"
+        f"Content:\n{doc.page_content}"
+        for doc in docs
+    ])

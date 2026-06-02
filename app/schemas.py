@@ -12,6 +12,7 @@ class SourceItem(BaseModel):
     source: Optional[str] = None
     source_type: Optional[str] = None
     page: Optional[int] = None
+    image_index: Optional[int] = None
     chunk_index: Optional[int] = None
     relevance_score: Optional[float] = None
 

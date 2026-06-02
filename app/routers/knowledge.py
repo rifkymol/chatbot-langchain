@@ -35,9 +35,21 @@ def add_knowledge(payload: KnowledgeRequest):
         )
 
 @router.post("/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(
+    file: UploadFile = File(...),
+    analyze_images: bool = Query(False, description="Analyze PDF embedded images using a vision model"),
+    max_images: int | None = Query(None, description="Maximum embedded images to analyze"),
+    fallback_render_pages: bool = Query(False, description="Render low-text pages if no embedded image analysis is found"),
+    max_render_pages: int = Query(3, description="Maximum rendered pages to analyze as fallback"),
+):
     try:
-        return await add_pdf_to_vector_store(file)
+        return await add_pdf_to_vector_store(
+            file=file,
+            analyze_images=analyze_images,
+            max_images=max_images,
+            fallback_render_pages=fallback_render_pages,
+            max_render_pages=max_render_pages,
+        )
     
     except ValueError as error:
         raise HTTPException(

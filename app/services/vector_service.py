@@ -8,9 +8,13 @@ from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sqlalchemy import text
 
 from app.database import engine
+from sqlalchemy import text, bindparam
+from app.services.vision_service import (
+    extract_embedded_images_from_pdf,
+    analyze_rendered_pages_to_documents,
+)
 
 from app.config import (
     DATABASE_URL,
@@ -62,7 +66,13 @@ def add_text_to_vector_store(title: str, content: str):
         "chunks": len(docs)
     }
 
-async def add_pdf_to_vector_store(file: UploadFile):
+async def add_pdf_to_vector_store(
+    file: UploadFile,
+    analyze_images: bool = False,
+    max_images: int | None = None,
+    fallback_render_pages: bool = False,
+    max_render_pages: int = 3,
+):
     if not file.filename.lower().endswith(".pdf"):
         raise ValueError("Only PDF files are allowed")
     
@@ -75,23 +85,55 @@ async def add_pdf_to_vector_store(file: UploadFile):
         loader = PyPDFLoader(temp_file_path)
         documents = loader.load()
 
-        chunks = split_documents(documents)
+        text_chunks = split_documents(documents)
 
-        for index, chunk in enumerate(chunks):
+        for index, chunk in enumerate(text_chunks):
             chunk.metadata["title"] = file.filename
             chunk.metadata["source"] = file.filename
-            chunk.metadata["source_type"] = "pdf"
+            chunk.metadata["source_type"] = "pdf_text"
             chunk.metadata["chunk_index"] = index
-            
+        
+        docs_to_store = list(text_chunks)
+
+        embedded_images_found = 0
+        image_analysis_chunks = 0
+        fallback_page_analysis_chunks = 0
+
+        if analyze_images:
+            image_docs, embedded_images_found = extract_embedded_images_from_pdf(
+                pdf_path=temp_file_path,
+                filename=file.filename,
+                max_images=max_images,
+            )
+
+            docs_to_store.extend(image_docs)
+            image_analysis_chunks = len(image_docs)
+
+            if analyze_images and fallback_render_pages:
+                rendered_page_docs = analyze_rendered_pages_to_documents(
+                    pdf_path=temp_file_path,
+                    filename=file.filename,
+                    max_pages=max_render_pages,
+                )
+
+                docs_to_store.extend(rendered_page_docs)
+                fallback_page_analysis_chunks = len(rendered_page_docs)
+
         vector_store = get_vector_store()
-        vector_store.add_documents(chunks)
+        vector_store.add_documents(docs_to_store)
 
         return {
             "message": "PDF uploaded successfully",
             "type": "pdf",
             "filename": file.filename,
             "pages": len(documents),
-            "chunks": len(chunks)
+            "text_chunks": len(text_chunks),
+            "embedded_images_found": embedded_images_found,
+            "image_analysis_chunks": image_analysis_chunks,
+            "fallback_page_analysis_chunks": fallback_page_analysis_chunks,
+            "total_chunks": len(docs_to_store),
+            "analyze_images": analyze_images,
+            "fallback_render_pages": fallback_render_pages,
         }
     
     finally:
@@ -160,19 +202,87 @@ def build_search_kwargs(
 
     return search_kwargs
 
+def normalize_sources(source: str | list[str] | None) -> list[str]:
+    if isinstance(source, str):
+        return [
+            item.strip()
+            for item in source.split(",")
+            if item.strip()
+        ]
+
+    return [
+        item.strip()
+        for item in (source or [])
+        if item and item.strip()
+    ]
+
+
+def get_visual_documents_by_source(
+    source: str | list[str] | None,
+    limit: int = 30,
+):
+    sources = normalize_sources(source)
+
+    if not sources:
+        return []
+
+    query = text("""
+        SELECT
+            document,
+            cmetadata
+        FROM langchain_pg_embedding
+        WHERE (
+            cmetadata->>'source' IN :sources
+            OR cmetadata->>'title' IN :sources
+        )
+        AND cmetadata->>'source_type' IN :source_types
+        ORDER BY
+            cmetadata->>'source',
+            CAST(COALESCE(cmetadata->>'page', '0') AS INTEGER),
+            CAST(COALESCE(cmetadata->>'image_index', '0') AS INTEGER),
+            CAST(COALESCE(cmetadata->>'chunk_index', '0') AS INTEGER)
+        LIMIT :limit
+    """).bindparams(
+        bindparam("sources", expanding=True),
+        bindparam("source_types", expanding=True),
+    )
+
+    with engine.connect() as connection:
+        result = connection.execute(
+            query,
+            {
+                "sources": sources,
+                "source_types": ["pdf_image", "pdf_page_image"],
+                "limit": limit,
+            }
+        )
+
+        docs = []
+
+        for row in result:
+            item = row._mapping
+
+            docs.append(
+                Document(
+                    page_content=item["document"],
+                    metadata=item["cmetadata"],
+                )
+            )
+
+    return docs
+
 def list_knowledge_sources():
     with engine.connect() as connection:
         result = connection.execute(text("""
             SELECT
                 cmetadata->>'title' AS title,
-                cmetadata->>'source' AS source,
-                cmetadata->>'source_type' AS source_type,
+                COALESCE(cmetadata->>'source', cmetadata->>'title') AS source,
+                MIN(cmetadata->>'source_type') AS source_type,
                 COUNT(*) AS chunks
             FROM langchain_pg_embedding
             GROUP BY
                 cmetadata->>'title',
-                cmetadata->>'source',
-                cmetadata->>'source_type'
+                COALESCE(cmetadata->>'source', cmetadata->>'title')
             ORDER BY title;
         """))
 
