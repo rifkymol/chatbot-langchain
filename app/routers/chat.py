@@ -75,5 +75,6 @@ def chat(payload: ChatRequest, db: Session = Depends(get_db)):
 
     return ChatResponse(
         answer=answer,
+        intent=result.get("intent"),
         sources=result["sources"]
     )

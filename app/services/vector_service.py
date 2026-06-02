@@ -101,7 +101,7 @@ def search_relevant_docs(
     query: str,
     k: int=8,
     min_score: float = 0.25,
-    source: str | None = None    
+    source: str | list[str] | None = None
 ):
 
     vector_store = get_vector_store()
@@ -129,21 +129,33 @@ def search_relevant_docs(
 def build_search_kwargs(
     query: str,
     k: int=8,
-    source: str | None = None
+    source: str | list[str] | None = None
 ):
     search_kwargs = {
         "query": query,
         "k": k,
     }
 
-    source = source.strip() if source else None
+    if isinstance(source, str):
+        sources = [item.strip() for item in source.split(",") if item.strip()]
+    else:
+        sources = [
+            item.strip()
+            for item in (source or [])
+            if item and item.strip()
+        ]
 
-    if source:
+    if sources:
+        source_filters = []
+
+        for item in sources:
+            source_filters.extend([
+                {"source": {"$eq": item}},
+                {"title": {"$eq": item}},
+            ])
+
         search_kwargs["filter"] = {
-            "$or": [
-                {"source": {"$eq": source}},
-                {"title": {"$eq": source}},
-            ]
+            "$or": source_filters
         }
 
     return search_kwargs

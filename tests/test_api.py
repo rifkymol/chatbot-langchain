@@ -76,6 +76,7 @@ class ApiTest(unittest.TestCase):
             question="Apa isi dokumen?",
             chat_history="user: Apa isi dokumen?\nassistant: Halo",
             source="manual.pdf",
+            mode="auto",
         )
 
     def test_chat_returns_400_for_invalid_graph_response(self):

@@ -8,7 +8,7 @@ class ChatState(TypedDict):
     question: str
     context: str
     chat_history: str
-    source: str | None
+    source: str | list[str] | None
     mode: str | None
     intent: str
     answer: str
@@ -128,6 +128,8 @@ def detect_intent_node(state: ChatState):
 
 def retrieve_context_node(state: ChatState):
     question = state["question"]
+    intent = state.get("intent", "qa")
+    mode = state.get("mode", "auto")
 
     summary_keywords = [
         "isi utama",
@@ -157,8 +159,8 @@ def retrieve_context_node(state: ChatState):
             "context": "",
             "chat_history": state["chat_history"],
             "source": state.get("source"),
-            "mode": state.get("mode"),
-            "intent": state["intent"],
+            "mode": mode,
+            "intent": intent,
             "answer": "Saya tidak menemukan informasi yang relevan di dokumen.",
             "sources": [],
         }
@@ -177,8 +179,8 @@ def retrieve_context_node(state: ChatState):
         "context": context,
         "chat_history": state["chat_history"],
         "source": state.get("source"),
-        "mode": state.get("mode"),
-        "intent": state["intent"],
+        "mode": mode,
+        "intent": intent,
         "answer": "",
         "sources": sources,
     }
@@ -235,7 +237,7 @@ chat_graph = build_chat_graph()
 def run_chatbot_graph(
     question: str,
     chat_history: str = "",
-    source: str | None = None,
+    source: str | list[str] | None = None,
     mode: str | None = "auto"
 ):
     result = chat_graph.invoke({
@@ -251,5 +253,6 @@ def run_chatbot_graph(
 
     return {
         "answer": result["answer"],
+        "intent": result["intent"],
         "sources": result["sources"],
     }

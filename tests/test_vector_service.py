@@ -32,6 +32,26 @@ class BuildSearchKwargsTest(unittest.TestCase):
 
         self.assertNotIn("filter", search_kwargs)
 
+    def test_multiple_sources_build_or_filter(self):
+        search_kwargs = build_search_kwargs(
+            query="apa isi dokumen?",
+            k=4,
+            source=["manual.pdf", "faq.pdf"],
+        )
+
+        self.assertEqual(
+            search_kwargs["filter"],
+            {
+                "$or": [
+                    {"source": {"$eq": "manual.pdf"}},
+                    {"title": {"$eq": "manual.pdf"}},
+                    {"source": {"$eq": "faq.pdf"}},
+                    {"title": {"$eq": "faq.pdf"}},
+                ]
+            },
+        )
+        json.dumps(search_kwargs["filter"])
+
 
 if __name__ == "__main__":
     unittest.main()
