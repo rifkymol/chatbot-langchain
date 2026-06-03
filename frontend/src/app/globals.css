@@ -41,3 +41,13 @@ textarea {
   background: #cce6da;
   color: var(--ink);
 }
+
+@keyframes upload-processing {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(320%);
+  }
+}

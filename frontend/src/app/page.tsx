@@ -58,6 +58,8 @@ type UploadResponse = {
   detail?: string;
 };
 
+type UploadStage = "idle" | "uploading" | "processing";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -152,6 +154,7 @@ export default function Home() {
   const [showSourceSuggestions, setShowSourceSuggestions] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [uploadFileName, setUploadFileName] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isLoadingSources, setIsLoadingSources] = useState(false);
@@ -373,7 +376,10 @@ export default function Home() {
     setShowSourceSuggestions(false);
   }
 
-  async function loadKnowledgeSources() {
+  async function loadKnowledgeSources(options?: {
+    showPanel?: boolean;
+    showSuggestions?: boolean;
+  }) {
     setError("");
     setKnowledgeMessage("");
     setIsLoadingSources(true);
@@ -393,9 +399,11 @@ export default function Home() {
       const uniqueSources = dedupeKnowledgeSources(data.sources ?? []);
 
       setKnowledgeSources(uniqueSources);
-      setShowKnowledge(true);
-      setShowSourceSuggestions(true);
-      setKnowledgeMessage(`Loaded ${uniqueSources.length} sources.`);
+      setShowKnowledge(options?.showPanel ?? false);
+      setShowSourceSuggestions(options?.showSuggestions ?? false);
+      setKnowledgeMessage(
+        options?.showPanel ? `Loaded ${uniqueSources.length} sources.` : "",
+      );
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -416,6 +424,7 @@ export default function Home() {
     setError("");
     setKnowledgeMessage("");
     setIsUploading(true);
+    setUploadStage("uploading");
     setUploadFileName(file.name);
     setUploadProgress(0);
 
@@ -436,7 +445,13 @@ export default function Home() {
           const nextProgress = Math.round(
             (progressEvent.loaded / progressEvent.total) * 100,
           );
-          setUploadProgress(Math.min(nextProgress, 100));
+          const boundedProgress = Math.min(nextProgress, 100);
+
+          setUploadProgress(boundedProgress);
+
+          if (boundedProgress >= 100) {
+            setUploadStage("processing");
+          }
         };
 
         request.onload = () => {
@@ -451,6 +466,7 @@ export default function Home() {
           }
 
           if (request.status >= 200 && request.status < 300) {
+            setUploadStage("processing");
             resolve(parsedData);
             return;
           }
@@ -472,7 +488,10 @@ export default function Home() {
         `${data.filename ?? file.name} uploaded. ${data.chunks ?? 0} chunks added.`,
       );
       showStatus(`${data.filename ?? file.name} uploaded successfully.`);
-      await loadKnowledgeSources();
+      await loadKnowledgeSources({
+        showPanel: true,
+        showSuggestions: false,
+      });
     } catch (caughtError) {
       const nextError =
         caughtError instanceof Error
@@ -483,6 +502,7 @@ export default function Home() {
       showStatus(nextError, "error");
     } finally {
       setIsUploading(false);
+      setUploadStage("idle");
       setUploadProgress(0);
       event.target.value = "";
     }
@@ -495,7 +515,10 @@ export default function Home() {
       return;
     }
 
-    void loadKnowledgeSources();
+    void loadKnowledgeSources({
+      showPanel: false,
+      showSuggestions: true,
+    });
   }
 
   function handleSourceInputChange(value: string) {
@@ -629,7 +652,11 @@ export default function Home() {
                   className="inline-flex items-center gap-2 rounded border border-[var(--line)] bg-white px-3 py-2 text-xs font-medium text-[var(--ink)] shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--soft)] disabled:cursor-not-allowed disabled:text-[var(--muted)]"
                 >
                   <Upload className="h-4 w-4" />
-                  {isUploading ? `${uploadProgress}%` : "Upload PDF"}
+                  {isUploading
+                    ? uploadStage === "processing"
+                      ? "Processing"
+                      : `${uploadProgress}%`
+                    : "Upload PDF"}
                 </button>
                 <button
                   type="button"
@@ -637,10 +664,14 @@ export default function Home() {
                     if (showKnowledge) {
                       setShowKnowledge(false);
                       setShowSourceSuggestions(false);
+                      setKnowledgeMessage("");
                       return;
                     }
 
-                    void loadKnowledgeSources();
+                    void loadKnowledgeSources({
+                      showPanel: true,
+                      showSuggestions: false,
+                    });
                   }}
                   disabled={isLoadingSources}
                   className="inline-flex items-center gap-2 rounded border border-[var(--line)] bg-white px-3 py-2 text-xs font-medium text-[var(--ink)] shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--soft)] disabled:cursor-not-allowed disabled:text-[var(--muted)]"
@@ -665,10 +696,16 @@ export default function Home() {
             {isUploading && uploadFileName && (
               <div className="shrink-0 border-b border-[var(--line)] bg-white px-4 py-3">
                 <div className="overflow-hidden rounded border border-[var(--line)] bg-[var(--surface)]">
-                  <div
-                    className="h-1 bg-[var(--accent)] transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
+                  {uploadStage === "processing" ? (
+                    <div className="h-1 overflow-hidden bg-[var(--line)]">
+                      <div className="h-full w-1/3 animate-[upload-processing_1.2s_ease-in-out_infinite] bg-[var(--accent)]" />
+                    </div>
+                  ) : (
+                    <div
+                      className="h-1 bg-[var(--accent)] transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  )}
                   <div className="flex items-center gap-3 px-3 py-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-white text-[var(--accent)] shadow-sm">
                       <File className="h-5 w-5" />
@@ -678,11 +715,15 @@ export default function Home() {
                         {uploadFileName}
                       </p>
                       <p className="text-xs text-[var(--muted)]">
-                        Uploading PDF knowledge
+                        {uploadStage === "processing"
+                          ? "Processing knowledge in the API"
+                          : "Uploading PDF knowledge"}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-[var(--accent)]">
-                      {uploadProgress}%
+                      {uploadStage === "processing"
+                        ? "Processing"
+                        : `${uploadProgress}%`}
                     </span>
                   </div>
                 </div>
@@ -706,7 +747,12 @@ export default function Home() {
                   {showKnowledge && (
                     <button
                       type="button"
-                      onClick={loadKnowledgeSources}
+                      onClick={() =>
+                        void loadKnowledgeSources({
+                          showPanel: true,
+                          showSuggestions: false,
+                        })
+                      }
                       className="inline-flex items-center gap-2 rounded px-2 py-1 text-xs font-medium text-[var(--muted)] transition hover:bg-white hover:text-[var(--ink)]"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
