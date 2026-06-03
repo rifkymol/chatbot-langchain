@@ -16,6 +16,9 @@ import {
   Plus,
   Check,
   ChevronDown,
+  Copy,
+  File,
+  Search,
 } from "lucide-react";
 
 type ChatMode = "auto" | "qa" | "summary" | "action_plan" | "checklist" | "priority";
@@ -47,6 +50,12 @@ type StatusToast = {
   id: string;
   message: string;
   tone: "success" | "error";
+};
+
+type UploadResponse = {
+  filename?: string;
+  chunks?: number;
+  detail?: string;
 };
 
 const API_BASE_URL =
@@ -140,20 +149,39 @@ export default function Home() {
     [],
   );
   const [showKnowledge, setShowKnowledge] = useState(false);
+  const [showSourceSuggestions, setShowSourceSuggestions] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadFileName, setUploadFileName] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isLoadingSources, setIsLoadingSources] = useState(false);
   const [deletingSource, setDeletingSource] = useState("");
   const [error, setError] = useState("");
   const [knowledgeMessage, setKnowledgeMessage] = useState("");
   const [statusToast, setStatusToast] = useState<StatusToast | null>(null);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
+  const sourcePickerRef = useRef<HTMLDivElement | null>(null);
   const [sessionId, setSessionId] = useState(() => getBrowserSessionId());
 
   const canSend = message.trim().length > 0 && !isSending;
+  const filteredKnowledgeSources = useMemo(() => {
+    const query = sourceInput.trim().toLowerCase();
+
+    if (!query) {
+      return knowledgeSources;
+    }
+
+    return knowledgeSources.filter((item) => {
+      const label = knowledgeSourceLabel(item).toLowerCase();
+      const value = getKnowledgeSourceValue(item).toLowerCase();
+
+      return label.includes(query) || value.includes(query);
+    });
+  }, [knowledgeSources, sourceInput]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,6 +212,22 @@ export default function Home() {
     document.addEventListener("mousedown", closeModeMenu);
 
     return () => document.removeEventListener("mousedown", closeModeMenu);
+  }, []);
+
+  useEffect(() => {
+    function closeSourceSuggestions(event: MouseEvent) {
+      if (
+        sourcePickerRef.current &&
+        !sourcePickerRef.current.contains(event.target as Node)
+      ) {
+        setShowSourceSuggestions(false);
+      }
+    }
+
+    document.addEventListener("mousedown", closeSourceSuggestions);
+
+    return () =>
+      document.removeEventListener("mousedown", closeSourceSuggestions);
   }, []);
 
   const sessionBadge = useMemo(() => {
@@ -300,6 +344,20 @@ export default function Home() {
     setSourceInput("");
   }
 
+  async function copyReply(messageId: string, content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      showStatus("Reply copied.");
+
+      window.setTimeout(() => {
+        setCopiedMessageId((current) => (current === messageId ? "" : current));
+      }, 1600);
+    } catch {
+      showStatus("Unable to copy reply.", "error");
+    }
+  }
+
   function clearConversation() {
     const nextSessionId = createSessionId();
 
@@ -312,6 +370,7 @@ export default function Home() {
     setSelectedSources([]);
     setSourceInput("");
     setShowKnowledge(false);
+    setShowSourceSuggestions(false);
   }
 
   async function loadKnowledgeSources() {
@@ -335,6 +394,7 @@ export default function Home() {
 
       setKnowledgeSources(uniqueSources);
       setShowKnowledge(true);
+      setShowSourceSuggestions(true);
       setKnowledgeMessage(`Loaded ${uniqueSources.length} sources.`);
     } catch (caughtError) {
       setError(
@@ -356,24 +416,57 @@ export default function Home() {
     setError("");
     setKnowledgeMessage("");
     setIsUploading(true);
+    setUploadFileName(file.name);
+    setUploadProgress(0);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch(`${API_BASE_URL}/knowledge/upload-pdf`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json().catch(() => null);
+      const data = await new Promise<UploadResponse>((resolve, reject) => {
+        const request = new XMLHttpRequest();
 
-      if (!response.ok) {
-        const detail =
-          typeof data?.detail === "string"
-            ? data.detail
-            : "Unable to upload PDF.";
-        throw new Error(detail);
-      }
+        request.open("POST", `${API_BASE_URL}/knowledge/upload-pdf`);
+
+        request.upload.onprogress = (progressEvent) => {
+          if (!progressEvent.lengthComputable) {
+            return;
+          }
+
+          const nextProgress = Math.round(
+            (progressEvent.loaded / progressEvent.total) * 100,
+          );
+          setUploadProgress(Math.min(nextProgress, 100));
+        };
+
+        request.onload = () => {
+          let parsedData: UploadResponse = {};
+
+          try {
+            parsedData = request.responseText
+              ? JSON.parse(request.responseText)
+              : {};
+          } catch {
+            parsedData = {};
+          }
+
+          if (request.status >= 200 && request.status < 300) {
+            resolve(parsedData);
+            return;
+          }
+
+          reject(
+            new Error(
+              typeof parsedData?.detail === "string"
+                ? parsedData.detail
+                : "Unable to upload PDF.",
+            ),
+          );
+        };
+
+        request.onerror = () => reject(new Error("Unable to upload PDF."));
+        request.send(formData);
+      });
 
       setKnowledgeMessage(
         `${data.filename ?? file.name} uploaded. ${data.chunks ?? 0} chunks added.`,
@@ -390,8 +483,30 @@ export default function Home() {
       showStatus(nextError, "error");
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
       event.target.value = "";
     }
+  }
+
+  function openKnowledgePicker() {
+    setShowSourceSuggestions(true);
+
+    if (knowledgeSources.length > 0 || isLoadingSources) {
+      return;
+    }
+
+    void loadKnowledgeSources();
+  }
+
+  function handleSourceInputChange(value: string) {
+    setSourceInput(value);
+    openKnowledgePicker();
+  }
+
+  function selectKnowledgeSource(sourceValue: string) {
+    addSelectedSource(sourceValue);
+    setSourceInput("");
+    setShowSourceSuggestions(false);
   }
 
   async function deleteKnowledgeSource(sourceToDelete: string) {
@@ -513,18 +628,15 @@ export default function Home() {
                   disabled={isUploading}
                   className="inline-flex items-center gap-2 rounded border border-[var(--line)] bg-white px-3 py-2 text-xs font-medium text-[var(--ink)] shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--soft)] disabled:cursor-not-allowed disabled:text-[var(--muted)]"
                 >
-                  {isUploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  Upload PDF
+                  <Upload className="h-4 w-4" />
+                  {isUploading ? `${uploadProgress}%` : "Upload PDF"}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     if (showKnowledge) {
                       setShowKnowledge(false);
+                      setShowSourceSuggestions(false);
                       return;
                     }
 
@@ -549,6 +661,33 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            {isUploading && uploadFileName && (
+              <div className="shrink-0 border-b border-[var(--line)] bg-white px-4 py-3">
+                <div className="overflow-hidden rounded border border-[var(--line)] bg-[var(--surface)]">
+                  <div
+                    className="h-1 bg-[var(--accent)] transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                  <div className="flex items-center gap-3 px-3 py-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-white text-[var(--accent)] shadow-sm">
+                      <File className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[var(--ink)]">
+                        {uploadFileName}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        Uploading PDF knowledge
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-[var(--accent)]">
+                      {uploadProgress}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(knowledgeMessage || showKnowledge) && (
               <div className="shrink-0 border-b border-[var(--line)] bg-[var(--surface)] px-4 py-3">
@@ -595,7 +734,7 @@ export default function Home() {
                           >
                             <button
                               type="button"
-                              onClick={() => addSelectedSource(sourceValue)}
+                              onClick={() => selectKnowledgeSource(sourceValue)}
                             className="min-w-0 px-3 py-2 text-left transition hover:bg-[var(--soft)] hover:text-[var(--ink)]"
                             >
                               <span className="block max-w-56 truncate font-medium text-[var(--ink)]">
@@ -650,31 +789,48 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div
-                    className={`min-w-0 max-w-[82%] rounded-md px-4 py-3 text-sm leading-6 ${
-                      item.role === "user"
-                        ? "bg-[var(--ink)] text-white"
-                        : "border border-[var(--line)] bg-white text-[var(--ink)]"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap break-words">
-                      {item.content}
-                    </p>
+                  <div className="flex min-w-0 max-w-[82%] flex-col items-start gap-1">
+                    <div
+                      className={`min-w-0 rounded-md px-4 py-3 text-sm leading-6 ${
+                        item.role === "user"
+                          ? "bg-[var(--ink)] text-white"
+                          : "border border-[var(--line)] bg-white text-[var(--ink)]"
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap break-words">
+                        {item.content}
+                      </p>
 
-                    {item.sources && item.sources.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
-                        {item.sources.map((sourceItem, index) => (
-                          <span
-                            key={`${sourceLabel(sourceItem)}-${index}`}
-                            className="max-w-full rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--muted)]"
-                          >
-                            <span className="inline-block max-w-48 truncate align-bottom">
-                              {sourceLabel(sourceItem)}
+                      {item.sources && item.sources.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
+                          {item.sources.map((sourceItem, index) => (
+                            <span
+                              key={`${sourceLabel(sourceItem)}-${index}`}
+                              className="max-w-full rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--muted)]"
+                            >
+                              <span className="inline-block max-w-48 truncate align-bottom">
+                                {sourceLabel(sourceItem)}
+                              </span>
+                              {sourceItem.page ? ` p.${sourceItem.page}` : ""}
                             </span>
-                            {sourceItem.page ? ` p.${sourceItem.page}` : ""}
-                          </span>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {item.role === "assistant" && (
+                      <button
+                        type="button"
+                        onClick={() => void copyReply(item.id, item.content)}
+                        className="ml-1 flex h-7 w-7 items-center justify-center rounded text-[var(--muted)] transition hover:bg-white hover:text-[var(--ink)]"
+                        aria-label="Copy reply"
+                      >
+                        {copiedMessageId === item.id ? (
+                          <Check className="h-3.5 w-3.5 text-[var(--accent)]" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
                     )}
                   </div>
 
@@ -746,7 +902,7 @@ export default function Home() {
                     aria-expanded={isModeMenuOpen}
                   >
                     <span className="font-semibold text-[var(--ink)]">Mode</span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--ink)]">
+                    <span className="min-w-0 flex-1 truncate rounded bg-[var(--accent)] px-2 py-1 text-sm font-semibold text-white">
                       {activeModeLabel}
                     </span>
                     <ChevronDown
@@ -791,49 +947,116 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="flex min-h-11 flex-wrap items-center gap-2 rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] transition focus-within:border-[var(--accent)] focus-within:bg-white">
-                  <span className="font-semibold text-[var(--ink)]">Source</span>
-                  {selectedSources.map((item) => (
-                    <span
-                      key={item}
-                      className="inline-flex max-w-full items-center gap-1 rounded border border-[var(--line)] bg-white px-2 py-1 text-xs text-[var(--ink)]"
-                    >
-                      <span className="max-w-48 truncate">{item}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeSelectedSource(item)}
-                        className="rounded text-[var(--muted)] transition hover:bg-[var(--soft)] hover:text-[var(--ink)]"
-                        aria-label={`Remove ${item}`}
+                <div ref={sourcePickerRef} className="relative">
+                  <div className="flex min-h-11 flex-wrap items-center gap-2 rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] transition focus-within:border-[var(--accent)] focus-within:bg-white">
+                    <span className="font-semibold text-[var(--ink)]">Source</span>
+                    {selectedSources.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex max-w-full items-center gap-1 rounded border border-[var(--line)] bg-white px-2 py-1 text-xs text-[var(--ink)]"
                       >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    value={sourceInput}
-                    onChange={(event) => setSourceInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addTypedSource();
-                      }
-                    }}
-                    placeholder={
-                      selectedSources.length > 0
-                        ? "Add another source"
-                        : "Optional file/source"
-                    }
-                    className="min-w-36 flex-1 bg-transparent text-sm text-[var(--ink)] outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={addTypedSource}
-                    disabled={!sourceInput.trim()}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white text-[var(--muted)] transition hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Add source"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
+                        <span className="max-w-48 truncate">{item}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSelectedSource(item)}
+                          className="rounded text-[var(--muted)] transition hover:bg-[var(--soft)] hover:text-[var(--ink)]"
+                          aria-label={`Remove ${item}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                    <div className="flex min-w-40 flex-1 items-center gap-2">
+                      <Search className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                      <input
+                        value={sourceInput}
+                        onChange={(event) =>
+                          handleSourceInputChange(event.target.value)
+                        }
+                        onFocus={openKnowledgePicker}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addTypedSource();
+                            setShowSourceSuggestions(false);
+                          }
+                        }}
+                        placeholder={
+                          selectedSources.length > 0
+                            ? "Add another source"
+                            : "Search knowledge source"
+                        }
+                        className="min-w-0 flex-1 bg-transparent text-sm text-[var(--ink)] outline-none"
+                      />
+                      {sourceInput && (
+                        <button
+                          type="button"
+                          onClick={() => setSourceInput("")}
+                          className="rounded text-[var(--muted)] transition hover:text-[var(--ink)]"
+                          aria-label="Clear source search"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addTypedSource}
+                      disabled={!sourceInput.trim()}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-white text-[var(--muted)] shadow-sm transition hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Add typed source"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {showSourceSuggestions && (
+                    <div className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-md border border-[var(--line)] bg-white p-1 shadow-xl">
+                      {isLoadingSources ? (
+                        <div className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--muted)]">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading knowledge...
+                        </div>
+                      ) : filteredKnowledgeSources.length > 0 ? (
+                        filteredKnowledgeSources.map((item, index) => {
+                          const sourceValue = getKnowledgeSourceValue(item);
+                          const isSelected =
+                            selectedSources.includes(sourceValue);
+
+                          return (
+                            <button
+                              key={`${knowledgeSourceLabel(item)}-${index}`}
+                              type="button"
+                              onClick={() => selectKnowledgeSource(sourceValue)}
+                              className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm transition hover:bg-[var(--surface)]"
+                            >
+                              <Search className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                              <span className="min-w-0 flex-1 truncate">
+                                <span className="font-semibold text-[var(--accent)]">
+                                  {knowledgeSourceLabel(item)}
+                                </span>
+                                <span className="ml-1 text-xs text-[var(--muted)]">
+                                  {item.source_type ?? "source"}
+                                  {typeof item.chunks === "number"
+                                    ? `, ${item.chunks} chunks`
+                                    : ""}
+                                </span>
+                              </span>
+                              {isSelected && (
+                                <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                              )}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-[var(--muted)]">
+                          {sourceInput.trim()
+                            ? "No matching knowledge sources."
+                            : "No knowledge sources found yet."}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </form>

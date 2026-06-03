@@ -37,10 +37,10 @@ def add_knowledge(payload: KnowledgeRequest):
 @router.post("/upload-pdf")
 async def upload_pdf(
     file: UploadFile = File(...),
-    analyze_images: bool = Query(False, description="Analyze PDF embedded images using a vision model"),
-    max_images: int | None = Query(None, description="Maximum embedded images to analyze"),
-    fallback_render_pages: bool = Query(False, description="Render low-text pages if no embedded image analysis is found"),
-    max_render_pages: int = Query(3, description="Maximum rendered pages to analyze as fallback"),
+    analyze_images: bool = Query(True, description="Analyze PDF embedded images using a vision model"),
+    max_images: int | None = Query(10, description="Maximum embedded images to analyze"),
+    fallback_render_pages: bool = Query(True, description="Render low-text pages if no embedded image analysis is found"),
+    max_render_pages: int = Query(8, description="Maximum rendered pages to analyze as fallback"),
 ):
     try:
         return await add_pdf_to_vector_store(
@@ -209,4 +209,3 @@ def delete_knowledge_source(
             status_code=500,
             detail=f"Failed to delete knowledge source: {str(error)}"
         )
-    
